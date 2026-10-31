@@ -1,0 +1,3 @@
+[console_scripts]
+deezer-downloader=deezer_downloader.cli.runner:main
+

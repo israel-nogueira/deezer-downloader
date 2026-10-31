@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="pt-BR">
+
+<head>
+	<meta charset="UTF-8" />
+	<title>Deezer Player</title>
+	<style>
+		* {
+			box-sizing: border-box;
+			margin: 0;
+			padding: 0;
+		}
+
+		html,
+		body {
+			height: 100%;
+			background: #0b0b0d;
+			color: #f2f2f4;
+			font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+			overflow: hidden;
+			user-select: none;
+		}
+
+		.wrap {
+			position: relative;
+			height: 100%;
+			width: 100%;
+			background: #0b0b0d url("./splash-screen.png") center/cover no-repeat;
+			-webkit-app-region: drag;
+		}
+
+		.rodape {
+			position: absolute;
+			left: 0;
+			right: 0;
+			bottom: 36px;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			gap: 10px;
+			padding: 0 32px;
+		}
+
+		.bar {
+			width: 70%;
+			max-width: 260px;
+			height: 4px;
+			background: rgba(28, 28, 33, 0.85);
+			border-radius: 4px;
+			overflow: hidden;
+			box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+		}
+
+		.bar i {
+			display: block;
+			height: 100%;
+			width: 0%;
+			background: linear-gradient(90deg, #f5e642, #ffb703);
+			border-radius: 4px;
+			transition: width 0.3s;
+		}
+
+		.msg {
+			color: #d8d8e0;
+			font-size: 11px;
+			min-height: 14px;
+			text-align: center;
+			text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+			letter-spacing: 0.3px;
+		}
+	</style>
+</head>
+
+<body>
+	<div class="wrap">
+		<div class="rodape">
+			<div class="bar"><i id="bar"></i></div>
+			<div class="msg" id="msg">Preparando tudo…</div>
+		</div>
+	</div>
+	<script>
+		window.splashSet = (pct, msg) => {
+			const b = document.getElementById('bar');
+			const m = document.getElementById('msg');
+			if (b) b.style.width = Math.max(0, Math.min(100, pct)) + '%';
+			if (m && msg) m.textContent = msg;
+		};
+	</script>
+</body>
+
+</html>

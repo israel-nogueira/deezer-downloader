@@ -1,0 +1,73 @@
+# ---------------------------------------------------------------------------
+# Dependências
+# ---------------------------------------------------------------------------
+node_modules/
+
+# ---------------------------------------------------------------------------
+# Build do electron-builder  (saída do npm run pack / npm run dist)
+# ---------------------------------------------------------------------------
+dist/
+out/
+
+# ---------------------------------------------------------------------------
+# Logs
+# ---------------------------------------------------------------------------
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ---------------------------------------------------------------------------
+# Sistema operacional
+# ---------------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ---------------------------------------------------------------------------
+# Editores / IDE
+# ---------------------------------------------------------------------------
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.suo
+*.user
+*.swp
+*.swo
+*~
+
+# ---------------------------------------------------------------------------
+# Segredos — NUNCA versionar  (ver seção 8 do README-DEV.md)
+# ---------------------------------------------------------------------------
+.env
+.env.*
+arl.bin
+*.arl
+*ARL*.txt
+!README*.md
+
+# ---------------------------------------------------------------------------
+# Cache / temporários
+# ---------------------------------------------------------------------------
+*.tmp
+*.temp
+.cache/
+
+# ---------------------------------------------------------------------------
+# resources/server/python/ É VERSIONADO DE PROPÓSITO
+# ---------------------------------------------------------------------------
+# O Python 3.13 embeddable + Lib/site-packages (~57 MB) fica no repositório
+# porque o app o consome via extraResources do electron-builder.
+#
+# É o padrão da comunidade Electron: evita download em runtime (rede,
+# integridade, versão) e garante que o instalador leve o motor incluso.
+#
+# NÃO adicione "resources/server/python/" neste arquivo — quem clona o repo
+# precisa do motor pra rodar o app.

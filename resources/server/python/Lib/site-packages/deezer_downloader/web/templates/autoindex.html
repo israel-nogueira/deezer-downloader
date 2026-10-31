@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Downloads</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #f5f5f4;
+      color: #1a1a1a;
+    }
+    .header {
+      padding: 14px 16px;
+      background: #fff;
+      border-bottom: 1px solid #e5e5e3;
+      position: sticky;
+      top: 0;
+    }
+    .header h1 {
+      font-size: 16px;
+      font-weight: 600;
+      margin: 0 0 2px;
+    }
+    .breadcrumb {
+      font-size: 12px;
+      color: #6b6b68;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+    .breadcrumb a { color: #6b6b68; text-decoration: none; }
+    ul { list-style: none; margin: 0; padding: 0; background: #fff; }
+    li {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      border-bottom: 1px solid #f0f0ee;
+    }
+    li a {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex: 1;
+      min-width: 0;
+      text-decoration: none;
+      color: inherit;
+    }
+    .name {
+      flex: 1;
+      min-width: 0;
+      font-size: 14px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .size {
+      font-size: 11px;
+      color: #9a9a96;
+      flex-shrink: 0;
+    }
+    .icon {
+      width: 20px;
+      height: 20px;
+      flex-shrink: 0;
+      text-align: center;
+      font-size: 16px;
+      line-height: 20px;
+    }
+    .dl {
+      flex-shrink: 0;
+      padding: 6px;
+      margin: -6px;
+      color: #6b6b68;
+      text-decoration: none;
+      font-size: 16px;
+    }
+    /* extra Luft für Tap-Targets auf kleinen Screens */
+    @media (max-width: 480px) {
+      li { padding: 14px 16px; }
+      .name { font-size: 15px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Downloads</h1>
+    <div class="breadcrumb">
+      <a href="{{ url_for('autoindex') }}">root</a>
+      {% for part in current_path.split('/') if part %}
+        <span>/</span><span>{{ part }}</span>
+      {% endfor %}
+    </div>
+  </div>
+
+  <ul>
+  {% for e in entries %}
+    <li>
+      {% if e.is_dir %}
+        <a href="{{ url_for('autoindex', path=e.path) }}">
+          <span class="icon">📁</span>
+          <span class="name">{{ e.name }}/</span>
+        </a>
+      {% else %}
+        <a href="{{ url_for('autoindex', path=e.path, as_attachment='false') }}">
+          <span class="icon">📄</span>
+          <span class="name">{{ e.name }}</span>
+        </a>
+        <span class="size">{{ e.size }}</span>
+        <a class="dl" href="{{ url_for('autoindex', path=e.path, as_attachment='true') }}" download>⬇️</a>
+      {% endif %}
+    </li>
+  {% endfor %}
+  </ul>
+</body>
+</html>

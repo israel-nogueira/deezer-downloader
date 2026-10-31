@@ -1,0 +1,61 @@
+{
+  "name": "deezer-player",
+  "version": "1.0.0",
+  "description": "Painel desktop para o kmille2/deezer-downloader (Python nativo, sem Docker).",
+  "productName": "Deezer Offline",
+  "main": "main.js",
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "start": "electron .",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "keywords": [],
+  "devDependencies": {
+    "electron": "^45.0.0",
+    "electron-builder": "^26.4.1",
+    "split.js": "^1.6.5"
+  },
+
+
+  "build": {
+    "appId": "com.local.deezerplayer",
+    "productName": "Deezer Offline",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "server.js",
+      "organizer.js",
+      "renderer/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/server",
+        "to": "server",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "renderer/favicon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}
