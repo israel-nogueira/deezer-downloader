@@ -79,8 +79,8 @@ O `electron-builder` gera o instalador em `dist\` — e ele já leva o **motor d
 Sem clonar nada, apenas baixar instalar e pronto:
 
 <p >
-  <a href="https://github.com/israel-nogueira/deezer-downloader/releases/latest/download/deezer-offline-setup.exe">
-  <b>⬇️ Baixar o instalador — deezer-offline-setup.exe (136 MB)</b></a>
+  <a href="https://github.com/israel-nogueira/deezer-downloader/releases/download/v1.0.0/deezer-offline-setup.exe">
+  <b>⬇️ Baixar o instalador — deezer-offline-setup.exe (138 MB)</b></a>
 </p>
 
 --- 

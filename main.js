@@ -314,13 +314,28 @@ ipcMain.handle('api:artistPage', async (event, { id }) => {
   if (!/^\d+$/.test(String(id))) return { ok: false, error: 'id de artista inválido' };
   try {
     const base = `https://api.deezer.com/artist/${id}`;
-    const [info, top, albums] = await Promise.all([
-      fetch(base).then((r) => r.json()),
-      fetch(`${base}/top?limit=10`).then((r) => r.json()),
-      fetch(`${base}/albums?limit=50`).then((r) => r.json())
-    ]);
+    const info = await fetch(base).then((r) => r.json());
     if (info.error) return { ok: false, error: info.error.message || 'erro do Deezer' };
-    return { ok: true, data: { info, top: top.data || [], albums: albums.data || [] } };
+
+    // top: até o teto da API (100)
+    const top = [];
+    for (let index = 0; index < 100; index += 50) {
+      const j = await fetch(`${base}/top?limit=50&index=${index}`).then((r) => r.json());
+      if (j.error) break;
+      top.push(...(j.data || []));
+      if (!j.next || !(j.data || []).length) break;
+    }
+
+    // álbuns: até o fim
+    const albums = [];
+    for (let index = 0; index < 5000; index += 100) {
+      const j = await fetch(`${base}/albums?limit=100&index=${index}`).then((r) => r.json());
+      if (j.error) break;
+      albums.push(...(j.data || []));
+      if (!j.next || !(j.data || []).length) break;
+    }
+
+    return { ok: true, data: { info, top, albums } };
   } catch (e) {
     return { ok: false, error: e.message };
   }

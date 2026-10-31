@@ -127,8 +127,10 @@
 		} catch (e) { /* ... */ }
 	}
 
-	const seloOffline = '<span style="color: var(--mut); font-size: 12px">[offline]</span>';
-
+const seloOffline =
+    '<span class="tag s-off" data-off-badge="1" role="button" tabindex="0" title="Já está no disco — clique para abrir">' +
+    '<svg class="i sm" style="vertical-align:-3px;margin-right:4px"><use href="#i-play"/></svg>' +
+    'Disponível</span>';
 	const coverCache = new Map();
 
 	async function capaLocal(tipo, id) {
@@ -235,6 +237,81 @@
 		.querySelectorAll("[data-view]")
 		.forEach((el) => el.addEventListener("click", () => showView(el.dataset.view)));
 
+
+		/* ===== Filtro global "mostrar apenas offline" ===== */
+		let soOffline = false;
+		try { soOffline = localStorage.getItem("so-offline") === "1"; } catch (e) {}
+
+		const linhaOffline = (row) =>
+			row && (row.dataset.off === "1" || row.dataset.offline === "1");
+
+		function aplicarFiltroOfflineTabela(tbody) {
+			if (!tbody) return;
+			let n = 0;
+			[...tbody.querySelectorAll("tr.row")].forEach((row) => {
+				const mostrar = !soOffline || linhaOffline(row);
+				row.style.display = mostrar ? "" : "none";
+				if (mostrar) {
+					const td = row.cells[1];
+					if (td) td.textContent = ++n;
+				}
+			});
+		}
+
+		function aplicarFiltroOffline() {
+			document.querySelectorAll(".chk-offline").forEach((c) => (c.checked = soOffline));
+
+			// Tabelas sem paginação: esconde linhas online e renumera
+			["t-album", "t-favs"].forEach((id) =>
+				aplicarFiltroOfflineTabela(document.getElementById(id))
+			);
+
+
+			// Cards (álbum/artista/playlist local): esconde os que não têm offline
+			document.querySelectorAll(".card[data-off]").forEach((card) => {
+				const mostrar = !soOffline || card.dataset.off === "1";
+				card.style.display = mostrar ? "" : "none";
+			});
+
+			// Aviso quando um grid fica vazio por causa do filtro
+			document.querySelectorAll(".grid").forEach((grid) => {
+				const cards = [...grid.querySelectorAll(":scope > .card")];
+				if (!cards.length) return;
+				const visiveis = cards.filter((c) => c.style.display !== "none");
+				let aviso = grid.querySelector(".filtro-vazio");
+				if (!visiveis.length) {
+					if (!aviso) {
+						aviso = document.createElement("small");
+						aviso.className = "filtro-vazio";
+						aviso.style.color = "var(--mut)";
+						aviso.style.padding = "8px 0";
+						aviso.textContent = "Nenhum item offline neste filtro.";
+						grid.appendChild(aviso);
+					}
+				} else if (aviso) {
+					aviso.remove();
+				}
+			});
+
+			// Aba Músicas do artista (paginação própria): re-render
+			if (curArtist) renderMusicasOffline();
+		}
+
+		// NOVO
+		document.addEventListener("change", (e) => {
+			if (!e.target.classList.contains("chk-offline")) return;
+			soOffline = e.target.checked;
+			try { localStorage.setItem("so-offline", soOffline ? "1" : "0"); } catch (e) {}
+			arMusicas.pagina = 0;
+			arAlbuns.pagina = 0;
+			albumPag.pagina = 0;
+			aplicarFiltroOffline();
+			renderAlbunsArtista();
+			renderAlbumTracks();
+			applySearchFilter();
+		});
+
+
 	/* ==========================================================================
 		05. TEMPLATES HTML
 		========================================================================== */
@@ -253,15 +330,18 @@
 		return `<td><button class="fav-btn ${on ? "on" : ""}" data-fav-id="${esc(id)}" title="${on ? "Remover das mais queridas" : "Adicionar às mais queridas"}"><svg class="i"><use href="#i-heart"/></svg></button></td>`;
 	};
 
-	function cardHTML({ title, sub, cover, type = "album", seed = 0, rel = "", coverTipo = "", coverId = "" }) {
+	function cardHTML({ title, sub, cover, type = "album", seed = 0, rel = "", coverTipo = "", coverId = "", temOffline = false }) {
 		const bg = cover ? "" : `style="background:${grad(seed)}"`;
 		const img = cover ? `<img src="${cover}" alt="">` : "";
 		const attrs = rel ? ` data-rel="${esc(rel)}"` : "";
 		const cAttrs =
 			coverTipo && coverId ? ` data-cover-tipo="${esc(coverTipo)}" data-cover-id="${esc(coverId)}"` : "";
-		return `<div class="card ${type === "artist" ? "art" : ""}"${attrs}>
+		const check = temOffline
+			? `<svg class="i sm" style="color:#1db954;vertical-align:-3px;margin-right:4px" title="Você tem faixas deste item no disco"><use href="#i-check"/></svg>`
+			: "";
+		return `<div class="card ${type === "artist" ? "art" : ""}"${attrs} data-off="${temOffline ? "1" : "0"}">
 			<div class="cv" ${bg}${cAttrs}>${img}<button class="play"><svg class="i f"><use href="#i-play"/></svg></button></div>
-			<b>${title}</b><small>${sub || ""}</small>
+			<b>${check}${title}</b><small>${sub || ""}</small>
 			</div>`;
 	}
 
@@ -295,9 +375,9 @@
 		if (type === "track" && id) {
 			off = offIds.has(String(id));
 		} else if (type === "album" && nbTracks > 0) {
-			off = (offAlbumsFaixas.get(albumKey(artist, title)) || 0) >= nbTracks;
+			off = (offAlbumsFaixas.get(albumKey(artist, title)) || 0) > 0; // antes: >= nbTracks
 		} else if (type === "playlist" && nbTracks > 0) {
-			off = (offPlaylistsFaixas.get(norm(title)) || 0) >= nbTracks;
+			off = (offPlaylistsFaixas.get(norm(title)) || 0) > 0;          // antes: >= nbTracks
 		}
 
 		const acao = off
@@ -308,16 +388,16 @@
 		const addPl = type === "track" && id
 			? `<button class="ibtn pl-add" data-tip="Adicionar à playlist"><svg class="i sm"><use href="#i-plus"/></svg></button>`
 			: "";
-		return `<tr class="row" data-i="${n}" data-id="${id}" data-type="${type}" data-preview="${esc(preview)}" data-off="${off ? "1" : ""}">
+		return `<tr class="row" data-i="${n}" data-id="${id}" data-type="${type}" data-preview="${esc(preview)}" data-off="${off ? "1" : "0"}">
 			${favCellHTML(id)}
 			<td>${n}</td>
-			<td><div class="t-cv"><div class="cv" ${bg}></div><div><b>${title}</b><small>${who}</small></div></div></td>
+			<td><div class="t-cv"><div class="cv" ${bg}></div><div><b>${checkOff(off)}${title}</b><small>${who}</small></div></div></td>
 			<td>${alb}</td>
 			<td>${badge ?? tagHTML(src)}</td>
 			${showDur ? `<td>${dur}</td>` : ""}
 			<td><div class="acts">
 				${addPl}
-				<button class="ibtn" data-tip="Tocar"><svg class="i f"><use href="#i-play"/></svg></button>
+				${off ? "" : '<button class="ibtn" data-tip="Tocar"><svg class="i f"><use href="#i-play"/></svg></button>'}
 				${acao}
 			</div></td>
 			</tr>`;
@@ -638,6 +718,7 @@
 								seed: i + 1,
 								coverTipo: "artist",
 								coverId: a.artistId,
+								temOffline: (a.faixas || 0) > 0,
 							})
 						)
 						.join("")
@@ -657,6 +738,7 @@
 								rel: a.rel,
 								coverTipo: "album",
 								coverId: a.albumId,
+								temOffline: (a.faixas || 0) > 0,
 							})
 						)
 						.join("")
@@ -679,6 +761,7 @@
 		].forEach((el) => aplicarCapa(el));
 
 		renderFavs();
+		aplicarFiltroOffline();
 		marcarTocando();
 	}
 
@@ -1006,7 +1089,7 @@
 			const artistId = cv ? cv.dataset.coverId : "";
 			openArtist({
 				textContent: card.querySelector("b").textContent,
-				dataset: { artistId },
+				dataset: { artistId, origemView: "artists" }, // <-- aqui
 				origem: "artists",
 				closest: () => null,
 			});
@@ -1342,11 +1425,14 @@
 		const sel = document.querySelector('input[name="s-type"]:checked').value;
 		let n = 0;
 		document.querySelectorAll("#t-results tr.row").forEach((r) => {
-			const show = sel === "all" || (r.dataset.type || "track") === sel;
+			const tipoOk = sel === "all" || (r.dataset.type || "track") === sel;
+			const offOk = !soOffline || r.dataset.off === "1";
+			const show = tipoOk && offOk;
 			r.style.display = show ? "" : "none";
 			if (show) r.cells[1].textContent = ++n;
 		});
 	}
+
 	document.getElementById("s-filter").addEventListener("change", applySearchFilter);
 
 	async function doSearch() {
@@ -1446,6 +1532,7 @@
 		body.innerHTML = rowsTracks.concat(rowsAlbums, rowsLists).join("");
 		applySearchFilter();
 		marcarTocando();
+		aplicarFiltroOffline();
 	}
 
 	/* ==========================================================================
@@ -1706,6 +1793,34 @@
 		err: '<span class="tag s-err">Erro</span>',
 	};
 
+		function renderAlbumTracks() {
+			const body = document.getElementById("t-album");
+			const info = document.getElementById("album-pag-info");
+			const prev = document.getElementById("album-pag-prev");
+			const next = document.getElementById("album-pag-next");
+			if (!body || !curAlbum) return;
+
+			let lista = curAlbum.tracks || [];
+			if (soOffline) lista = lista.filter((t) => t.id && offIds.has(String(t.id)));
+
+			const { total, paginas, visiveis } = paginar(lista, albumPag);
+
+			if (info) info.textContent = `${albumPag.pagina + 1} / ${paginas}`;
+			if (prev) prev.disabled = albumPag.pagina === 0;
+			if (next) next.disabled = albumPag.pagina >= paginas - 1;
+
+			if (!visiveis.length) {
+				body.innerHTML = `<tr><td colspan="5" style="color:var(--mut);padding:18px 0">${
+				(curAlbum.tracks || []).length ? "Nada offline nesta página." : "Nenhuma faixa."
+				}</td></tr>`;
+				return;
+			}
+
+			body.innerHTML = visiveis.map((t) => albumRowHTML(t, curAlbum)).join("");
+			[...body.querySelectorAll(".t-cv .cv[data-cover-tipo]")].forEach((el) => aplicarCapa(el));
+		}
+
+
 	function albumRowHTML(t, a) {
 		const bg = a.cover
 			? `background:url('${esc(a.cover)}') center/cover`
@@ -1735,14 +1850,14 @@
 			? `<button class="ibtn" data-tip="Remover da playlist" data-remove-pl="${esc(a.title)}" data-remove-id="${esc(t.id)}"><svg class="i sm"><use href="#i-x"/></svg></button>`
 			: "";
 
-		return `<tr class="row" data-id="${t.id}" data-preview="${esc(t.preview)}" data-off="${off ? "1" : ""}">
+		return `<tr class="row" data-id="${t.id}" data-preview="${esc(t.preview)}" data-off="${off ? "1" : "0"}">
 			${favCellHTML(t.id)}
 			<td>${t.track_position}</td>
-			<td><div class="t-cv"><div class="cv" style="${bg}"${cAttrs}></div><div><b>${esc(t.title)}</b><small>${who}</small></div></div></td>
+			<td><div class="t-cv"><div class="cv" style="${bg}"${cAttrs}></div><div><b>${checkOff(off)}${esc(t.title)}</b><small>${who}</small></div></div></td>
 			<td>${fmtT(t.duration)}</td>
 			<td><div class="acts">
 				${addPl}
-				<button class="ibtn" data-tip="Tocar"><svg class="i f"><use href="#i-play"/></svg></button>
+				${off ? "" : '<button class="ibtn" data-tip="Tocar"><svg class="i f"><use href="#i-play"/></svg></button>'}
 				${rem}
 				${acao}
 			</div></td>
@@ -1836,8 +1951,8 @@
 			});
 		}
 
-		body.innerHTML = a.tracks.map((t) => albumRowHTML(t, a)).join("");
-		[...body.querySelectorAll(".t-cv .cv[data-cover-tipo]")].forEach((el) => aplicarCapa(el));
+		albumPag.pagina = 0;
+		renderAlbumTracks();
 
 		albumFila = a.tracks
 			.filter((t) => t.id && t.preview)
@@ -1853,8 +1968,8 @@
 			});
 		ligarPlayAlbum();
 		marcarTocando();
-
 		refreshSlots();
+		aplicarFiltroOffline();
 	}
 
 	async function openPlaylist(row) {
@@ -1931,8 +2046,8 @@
 			});
 		}
 
-		body.innerHTML = a.tracks.map((t) => albumRowHTML(t, a)).join("");
-		[...body.querySelectorAll(".t-cv .cv[data-cover-tipo]")].forEach((el) => aplicarCapa(el));
+		albumPag.pagina = 0;
+		renderAlbumTracks();
 
 		albumFila = a.tracks
 			.filter((t) => t.id && t.preview)
@@ -1945,8 +2060,8 @@
 			}));
 		ligarPlayAlbum();
 		marcarTocando();
-
 		refreshSlots();
+		aplicarFiltroOffline();
 	}
 
 	function openAlbum(row) {
@@ -1960,7 +2075,14 @@
 			origem: "search",
 		});
 	}
-
+	document.getElementById("album-pag-prev")?.addEventListener("click", () => {
+		albumPag.pagina--;
+		renderAlbumTracks();
+	});
+	document.getElementById("album-pag-next")?.addEventListener("click", () => {
+		albumPag.pagina++;
+		renderAlbumTracks();
+	});
 	document.getElementById("t-results").addEventListener("click", (e) => {
 		if (e.target.closest("button") || e.target.closest(".artist-link") || e.target.closest(".album-link")) return;
 		const row = e.target.closest("tr.row");
@@ -2295,6 +2417,35 @@
 
 	let arFila = [];
 
+	// paginação client-side da aba Álbuns do artista
+	const arAlbuns = { todas: [], pagina: 0, porPagina: 20 };
+
+	// paginação client-side da página de álbum/playlist
+	const albumPag = { pagina: 0, porPagina: 20 };
+
+	// helper de paginação reutilizável
+	function paginar(lista, estado) {
+	const total = lista.length;
+	const paginas = Math.max(1, Math.ceil(total / estado.porPagina));
+	if (estado.pagina >= paginas) estado.pagina = paginas - 1;
+	if (estado.pagina < 0) estado.pagina = 0;
+	const ini = estado.pagina * estado.porPagina;
+	return {
+		total,
+		paginas,
+		ini,
+		visiveis: lista.slice(ini, ini + estado.porPagina),
+	};
+	}
+
+	// NOVO — ✓ verde no nome quando offline
+	function checkOff(off) {
+	return off
+		? `<svg class="i sm" style="color:#1db954;vertical-align:-3px;margin-right:4px" title="Já está no disco"><use href="#i-check"/></svg>`
+		: "";
+	}
+
+
 	function tabAtiva(name) {
 		document.querySelectorAll("#ar-tabs .tab").forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
 		document.querySelectorAll("#v-artist .tab-panel").forEach((p) => p.classList.toggle("on", p.id === `ar-panel-${name}`));
@@ -2305,10 +2456,10 @@
 	);
 
 	function filaArtistaVisivel() {
+		let lista = arMusicas.todas;
+		if (soOffline) lista = lista.filter((x) => x.offline);
 		const f = norm(arMusicas.filtro);
-		const lista = f
-			? arMusicas.todas.filter((x) => norm(x.titulo).includes(f) || norm(x.album).includes(f))
-			: arMusicas.todas;
+		if (f) lista = lista.filter((x) => norm(x.titulo).includes(f) || norm(x.album).includes(f));
 		return lista;
 	}
 
@@ -2347,10 +2498,10 @@
 		const prev = document.getElementById("ar-pag-prev");
 		const next = document.getElementById("ar-pag-next");
 
+		let lista = arMusicas.todas;
+		if (soOffline) lista = lista.filter((x) => x.offline);
 		const f = norm(arMusicas.filtro);
-		const lista = f
-			? arMusicas.todas.filter((x) => norm(x.titulo).includes(f) || norm(x.album).includes(f))
-			: arMusicas.todas;
+		if (f) lista = lista.filter((x) => norm(x.titulo).includes(f) || norm(x.album).includes(f));
 
 		const total = lista.length;
 		const paginas = Math.max(1, Math.ceil(total / arMusicas.porPagina));
@@ -2361,13 +2512,22 @@
 		const fim = ini + arMusicas.porPagina;
 		const visiveis = lista.slice(ini, fim);
 
-		contagem.textContent = `${total} música${total === 1 ? "" : "s"}`;
+		const sufixos = [];
+		if (soOffline) sufixos.push("offline");
+		if (arMusicas.filtro) sufixos.push(`filtro: "${arMusicas.filtro}"`);
+		const suf = sufixos.length ? ` (${sufixos.join(" · ")})` : "";
+		contagem.textContent = `${total} música${total === 1 ? "" : "s"}${suf}`;
+
 		pagInfo.textContent = `Página ${arMusicas.pagina + 1} de ${paginas}`;
 		prev.disabled = arMusicas.pagina === 0;
 		next.disabled = arMusicas.pagina >= paginas - 1;
 
 		if (!visiveis.length) {
-			body.innerHTML = `<tr><td colspan="5" style="color:var(--mut);padding:18px 0">${arMusicas.todas.length ? "Nada casou com o filtro." : "Nenhuma faixa offline deste artista."}</td></tr>`;
+			body.innerHTML = `<tr><td colspan="5" style="color:var(--mut);padding:18px 0">${
+				arMusicas.todas.length
+					? "Nada casou com o filtro."
+					: "Nenhuma faixa deste artista."
+			}</td></tr>`;
 			atualizarFilaArtista();
 			marcarTocando();
 			return;
@@ -2377,7 +2537,8 @@
 			.map((x, i) => {
 				const n = ini + i + 1;
 				const cAttrs = x.albumId ? ` data-cover-tipo="album" data-cover-id="${esc(x.albumId)}"` : "";
-				const bg = `background:${grad(n + 1)}`;
+				const coverRemota = x.coverRemota || '';
+				const bg = x.coverRemota ? `background:url('${esc(x.coverRemota)}') center/cover` : `background:${grad(n + 1)}`;
 				const album = x.album || "";
 				const albLink =
 					x.albumId && album
@@ -2388,10 +2549,11 @@
 				const addPl = x.id
 					? `<button class="ibtn pl-add" data-tip="Adicionar à playlist"><svg class="i sm"><use href="#i-plus"/></svg></button>`
 					: "";
-				return `<tr class="row" data-i="${n}" data-id="${esc(x.id || "")}" data-preview="${esc(x.url)}" data-offline="1" data-off="1">
+				const off = x.offline ? "1" : "0";
+				return `<tr class="row" data-i="${n}" data-id="${esc(x.id || "")}" data-preview="${esc(x.url)}" data-off="${off}" data-offline="${off}">
 					${favCellHTML(x.id)}
 					<td>${n}</td>
-					<td><div class="t-cv"><div class="cv" style="${bg}"${cAttrs}></div><div><b>${esc(x.titulo)}</b>${albLink ? `<small>${albLink}</small>` : ""}</div></div></td>
+					<td><div class="t-cv"><div class="cv" style="${bg}"${cAttrs}></div><div><b>${checkOff(x.offline)}${esc(x.titulo)}</b>${albLink ? `<small>${albLink}</small>` : ""}</div></div></td>
 					<td>${x.dur > 0 ? fmtT(x.dur) : "--:--"}</td>
 					<td><div class="acts">${addPl}${x.url ? '<button class="ibtn" data-tip="Tocar"><svg class="i f"><use href="#i-play"/></svg></button>' : ""}</div></td>
 					</tr>`;
@@ -2404,6 +2566,45 @@
 		marcarTocando();
 	}
 
+	function renderAlbunsArtista() {
+		const grid = document.getElementById("ar-albums");
+		const info = document.getElementById("ar-pag-albuns-info");
+		const prev = document.getElementById("ar-pag-albuns-prev");
+		const next = document.getElementById("ar-pag-albuns-next");
+		if (!grid) return;
+
+		let lista = arAlbuns.todas;
+		if (soOffline) lista = lista.filter((a) => a.temOffline);
+
+		const { total, paginas, ini, visiveis } = paginar(lista, arAlbuns);
+
+		if (info) info.textContent = `${arAlbuns.pagina + 1} / ${paginas}`;
+		if (prev) prev.disabled = arAlbuns.pagina === 0;
+		if (next) next.disabled = arAlbuns.pagina >= paginas - 1;
+
+		if (!visiveis.length) {
+			grid.innerHTML = `<small style="color:var(--mut)">${
+			arAlbuns.todas.length ? "Nada offline nesta aba." : "Nenhum álbum disponível."
+			}</small>`;
+			return;
+		}
+
+		grid.innerHTML = visiveis
+			.map((a, i) => {
+			const cAttrs = a.id ? ` data-cover-tipo="album" data-cover-id="${esc(a.id)}"` : "";
+			const bg = a.cover ? "" : `style="background:${grad(ini + i + 1)}"`;
+			const img = a.cover ? `<img src="${esc(a.cover)}" alt="">` : "";
+			const check = checkOff(a.temOffline);
+			return `<div class="card" data-album-id="${esc(a.id)}" data-title="${esc(a.title)}" data-cover="${esc(a.cover || "")}" data-off="${a.temOffline ? "1" : "0"}">
+				<div class="cv" ${bg}${cAttrs}>${img}</div>
+				<b>${check}${esc(a.title)}</b>
+				<small>${esc(a.artist || (curArtist ? curArtist.name : ""))}</small>
+			</div>`;
+			})
+			.join("");
+
+		[...grid.querySelectorAll(".cv[data-cover-tipo]")].forEach((el) => aplicarCapa(el));
+	}
 	function ligarFiltro() {
 		const inp = document.getElementById("ar-filtro");
 		if (inp.dataset.ligado === "1") return;
@@ -2451,14 +2652,14 @@
 		const addPl = t.id
 			? `<button class="ibtn pl-add" data-tip="Adicionar à playlist"><svg class="i sm"><use href="#i-plus"/></svg></button>`
 			: "";
-		return `<tr class="row" data-id="${t.id}" data-preview="${esc(t.preview)}" data-off="${off ? "1" : ""}">
+		return `<tr class="row" data-id="${t.id}" data-preview="${esc(t.preview)}" data-off="${off ? "1" : "0"}">
 			${favCellHTML(t.id)}
 			<td>${i + 1}</td>
 			<td><div class="t-cv"><div class="cv" style="${bg}"${cAttrs}></div><div><b>${esc(t.title)}</b>${albLink ? `<small>${albLink}</small>` : ""}</div></div></td>
 			<td>${fmtT(t.duration)}</td>
 			<td><div class="acts">
 				${addPl}
-				<button class="ibtn" data-tip="Tocar"><svg class="i f"><use href="#i-play"/></svg></button>
+				${off ? "" : '<button class="ibtn" data-tip="Tocar"><svg class="i f"><use href="#i-play"/></svg></button>'}
 				${acao}
 			</div></td>
 			</tr>`;
@@ -2487,187 +2688,196 @@
 
 	async function openArtist(link) {
 		const row = link.closest && link.closest("tr.row");
-		const token = { name: link.textContent, origem: link.origem || "search" };
+		const token = { name: link.textContent };
 		curArtist = token;
 		arFila = [];
+
+		// ===== CORREÇÃO 2: origem do botão "Voltar" =====
+		const origemView = (link.dataset && link.dataset.origemView) || link.origem || "search";
+		const backBtn = document.querySelector('#v-artist .art-head .btn-ghost[data-view]');
+		if (backBtn) backBtn.dataset.view = origemView;
 
 		const sub = document.getElementById("ar-sub");
 		document.getElementById("ar-name").textContent = token.name;
 		document.getElementById("ar-pic").style.backgroundImage = "";
 		document.getElementById("t-artist-top").innerHTML = "";
 		document.getElementById("ar-albums").innerHTML = "";
+		document.getElementById("ar-panel-playlists").innerHTML = "";
 		document.getElementById("ar-contagem").textContent = "";
 		sub.textContent = "Carregando...";
 		tabAtiva("musicas");
-
-		const backBtn = document.querySelector("#v-artist .btn-ghost[data-view]");
-		if (backBtn) backBtn.dataset.view = token.origem === "artists" ? "artists" : "search";
-
 		showView("artist");
 
-		if (token.origem === "artists") {
-			if (!backend.libraryArtist) return (sub.textContent = "Faixas offline indisponíveis");
-
-			let faixas = [];
-			try {
-				faixas = await backend.libraryArtist(token.name);
-			} catch (e) {
-				faixas = [];
+		// 1) Tenta online
+		let online = null;
+		let id = link.dataset && link.dataset.artistId;
+		try {
+			if (!id && row && row.dataset.id && backend.trackInfo) {
+				const r = await backend.trackInfo(row.dataset.id);
+				if (r && r.ok && r.data && r.data.artist) id = r.data.artist.id;
 			}
+			if (id && backend.artistPage) {
+				const res = await backend.artistPage(id);
+				if (res && res.ok) online = res.data;
+			}
+		} catch (e) { /* cai no offline */ }
+		if (curArtist !== token) return;
+
+		// 2) Monta a lista de músicas e álbuns
+		let todas = [];
+		let albums = [];
+		let artistaIdParaCapa = id;
+
+		if (online) {
+			const { info, top, albums: alb } = online;
+			token.name = info.name;
+			document.getElementById("ar-name").textContent = info.name;
+			document.getElementById("ar-pic").style.backgroundImage = `url("${info.picture_big}")`;
+			sub.textContent = `${(info.nb_fan || 0).toLocaleString("pt-BR")} fãs · ${info.nb_album || alb.length} álbuns`;
+			artistaIdParaCapa = info.id;
+
+			todas = (top || []).map((t) => {
+				const tid = String(t.id);
+				return {
+					id: tid,
+					titulo: t.title,
+					artista: (t.artist && t.artist.name) || info.name,
+					album: (t.album && t.album.title) || "",
+					albumId: (t.album && t.album.id) || "",
+					// ===== CORREÇÃO 1: capa remota do álbum =====
+					coverRemota: (t.album && (t.album.cover_small || t.album.cover_medium)) || "",
+					dur: t.duration || -1,
+					url: t.preview || "",
+					offline: offIds.has(tid),
+				};
+			});
+
+			albums = (alb || [])
+				.slice()
+				.sort((a, b) => (b.release_date || "").localeCompare(a.release_date || ""));
+
+			// Quais álbuns deste artista têm pelo menos uma faixa no disco?
+			let albunsComOffline = new Set();
+			try {
+				const lib = await backend.libraryArtistAlbums(token.name);
+				(lib || []).forEach((a) => {
+					if ((a.faixasNoDisco || 0) > 0 && a.albumId) {
+						albunsComOffline.add(String(a.albumId));
+					}
+				});
+			} catch (e) { /* segue sem o check */ }
 			if (curArtist !== token) return;
 
-			arMusicas.todas = (faixas || [])
+			albums = albums.map((a) => ({
+				id: a.id,
+				title: a.title,
+				artist: info.name,
+				cover: a.cover_medium || a.cover || "",
+				cover_small: a.cover_small || a.cover || "",
+				temOffline: albunsComOffline.has(String(a.id)),
+			}));
+		} else {
+			// 2b) Fallback offline
+			let faixas = [];
+			try { faixas = await backend.libraryArtist(token.name); } catch (e) {}
+			if (curArtist !== token) return;
+
+			todas = (faixas || [])
 				.filter((f) => f.id)
 				.map((f) => {
 					const sep = f.nome.indexOf(" - ");
 					const titulo = sep > 0 ? f.nome.slice(sep + 3) : f.nome;
-					const artista = sep > 0 ? f.nome.slice(0, sep) : token.name;
 					return {
-						id: f.id,
+						id: String(f.id),
 						titulo,
-						artista,
+						artista: token.name,
 						album: f.albumTitle || "",
 						albumId: f.albumId || "",
+						// offline: capa virá do aplicarCapa() se estiver em disco
+						coverRemota: "",
 						dur: f.dur || -1,
 						url: f.url || "",
+						offline: true,
 					};
-				})
-				.sort((a, b) => a.titulo.localeCompare(b.titulo, "pt-BR"));
-
-			arMusicas.filtro = "";
-			arMusicas.pagina = 0;
-
-			const inp = document.getElementById("ar-filtro");
-			inp.value = "";
-			inp.disabled = false;
-			ligarFiltro();
-			ligarPaginacao();
-
-			sub.textContent = `${contar(arMusicas.todas.length)} · offline`;
-			renderMusicasOffline();
-
-			ligarPlayArtista();
-
-			const cache = artistCache.get(token.name) || {};
-			if (!cache.albums && backend.libraryArtistAlbums) {
-				try {
-					cache.albums = await backend.libraryArtistAlbums(token.name);
-				} catch (e) {
-					cache.albums = [];
-				}
-				artistCache.set(token.name, cache);
-			}
-			if (curArtist !== token) return;
-			const albuns = cache.albums || [];
-			document.getElementById("ar-albums").innerHTML = albuns.length
-				? albuns
-						.map((a, i) => {
-							const cAttrs = a.albumId ? ` data-cover-tipo="album" data-cover-id="${esc(a.albumId)}"` : "";
-							const bg = a.cover ? "" : `style="background:${grad(i + 1)}"`;
-							const img = a.cover ? `<img src="${a.cover}" alt="">` : "";
-							return `<div class="card" data-album-id="${a.albumId}" data-title="${esc(a.title)}" data-cover="${esc(a.cover || "")}">
-								<div class="cv" ${bg}${cAttrs}>${img}</div>
-								<b>${esc(a.title)}</b><small>${a.faixasNoDisco} faixa${a.faixasNoDisco === 1 ? "" : "s"} no disco</small>
-								</div>`;
-						})
-						.join("")
-				: '<small style="color: var(--mut)">Nenhum álbum deste artista no disco</small>';
-			[...document.querySelectorAll("#ar-albums .cv[data-cover-tipo]")].forEach((el) => aplicarCapa(el));
-
-			if (!cache.playlists && backend.libraryArtistPlaylists) {
-				try {
-					cache.playlists = await backend.libraryArtistPlaylists(token.name);
-				} catch (e) {
-					cache.playlists = [];
-				}
-				artistCache.set(token.name, cache);
-			}
-			if (curArtist !== token) return;
-			const pls = cache.playlists || [];
-			document.getElementById("ar-panel-playlists").innerHTML = pls.length
-				? `<div class="grid">${pls.map((p, i) => artistPlaylistCardHTML(p, i)).join("")}</div>`
-				: '<p style="color: var(--mut)">Nenhuma playlist com faixas deste artista.</p>';
-			[...document.querySelectorAll("#ar-panel-playlists .cv[data-cover-tipo]")].forEach((el) => aplicarCapa(el));
-
-			const artistId = link.dataset && link.dataset.artistId;
-			if (artistId) {
-				capaLocal("artist", artistId).then((url) => {
-					if (url && curArtist === token) {
-						document.getElementById("ar-pic").style.backgroundImage = `url("${url}")`;
-					}
 				});
-			}
+			sub.textContent = `${contar(todas.length)} · offline`;
 
-			return;
-		}
-
-		let id = link.dataset && link.dataset.artistId;
-		if (!id) {
-			const r = await backend.trackInfo(row.dataset.id);
+			let lib = [];
+			try { lib = (await backend.libraryArtistAlbums(token.name)) || []; } catch (e) { lib = []; }
 			if (curArtist !== token) return;
-			if (!r.ok || !r.data.artist) return (sub.textContent = "Não foi possível carregar o artista");
-			id = r.data.artist.id;
+
+			albums = lib.map((a) => ({
+				id: a.albumId,
+				title: a.title,
+				artist: token.name,
+				cover: a.cover || "",
+				cover_small: a.cover || "",
+				temOffline: (a.faixasNoDisco || 0) > 0,
+			}));
 		}
-
-		const res = await backend.artistPage(id);
 		if (curArtist !== token) return;
-		if (!res.ok) return (sub.textContent = `Não foi possível carregar (${res.error})`);
 
-		const { info, top, albums } = res.data;
-		token.name = info.name;
-		document.getElementById("ar-name").textContent = info.name;
-		document.getElementById("ar-pic").style.backgroundImage = `url("${info.picture_big}")`;
-		sub.textContent = `${(info.nb_fan || 0).toLocaleString("pt-BR")} fãs · ${info.nb_album || albums.length} álbuns`;
+		// 3) Playlists locais do artista (sempre)
+		let playlists = [];
+		try { playlists = (await backend.libraryArtistPlaylists(token.name)) || []; } catch (e) {}
+		if (curArtist !== token) return;
 
-		document.getElementById("t-artist-top").innerHTML = top.map(artistTopRowHTML).join("");
-		document.getElementById("ar-contagem").textContent = `${top.length} música${top.length === 1 ? "" : "s"}`;
-		document.getElementById("ar-filtro").value = "";
-		document.getElementById("ar-filtro").disabled = true;
-		document.getElementById("ar-pag-info").textContent = "";
-		document.getElementById("ar-pag-prev").disabled = true;
-		document.getElementById("ar-pag-next").disabled = true;
-
-		arMusicas.todas = top
-			.map((t) => ({
-				id: t.id,
-				titulo: t.title,
-				artista: (t.artist && t.artist.name) || "",
-				album: (t.album && t.album.title) || "",
-				albumId: (t.album && t.album.id) || "",
-				dur: t.duration || -1,
-				url: t.preview || "",
-			}))
-			.filter((x) => x.id);
+		// 4) Aba Músicas
+		arMusicas.todas = todas;
 		arMusicas.filtro = "";
+		arMusicas.pagina = 0;
 
-		document.getElementById("ar-albums").innerHTML = albums
-			.slice()
-			.sort((a, b) => (b.release_date || "").localeCompare(a.release_date || ""))
-			.map(artistAlbumCardHTML)
-			.join("");
-
-		document.getElementById("ar-panel-playlists").innerHTML =
-			'<p style="color: var(--mut)">Em breve.</p>';
-
+		const inp = document.getElementById("ar-filtro");
+		inp.value = "";
+		inp.disabled = false;
+		ligarFiltro();
+		ligarPaginacao();
+		renderMusicasOffline();
 		ligarPlayArtista();
 
-		capaLocal("artist", id).then((url) => {
-			if (url && curArtist === token) {
-				document.getElementById("ar-pic").style.backgroundImage = `url("${url}")`;
-			}
-		});
+		arAlbuns.todas = albums;
+		arAlbuns.pagina = 0;
+		renderAlbunsArtista();
 
-		[...document.querySelectorAll("#t-artist-top .cv[data-cover-tipo]")].forEach((el) => aplicarCapa(el));
-		[...document.querySelectorAll("#ar-albums .cv[data-cover-tipo]")].forEach((el) => aplicarCapa(el));
+		// 6) Aba Playlists
+		const plEl = document.getElementById("ar-panel-playlists");
+		plEl.innerHTML = playlists.length
+			? `<div class="grid">${playlists.map((p, i) => artistPlaylistCardHTML(p, i)).join("")}</div>`
+			: '<p style="color: var(--mut)">Nenhuma playlist com faixas deste artista.</p>';
+		[...plEl.querySelectorAll(".cv[data-cover-tipo]")].forEach((el) => aplicarCapa(el));
+
+		// 7) Capa do artista
+		if (artistaIdParaCapa) {
+			capaLocal("artist", artistaIdParaCapa).then((url) => {
+				if (url && curArtist === token) {
+					document.getElementById("ar-pic").style.backgroundImage = `url("${url}")`;
+				}
+			});
+		}
+
+		aplicarFiltroOffline();
 		marcarTocando();
 	}
+	document.getElementById("ar-pag-albuns-prev")?.addEventListener("click", () => {
+		arAlbuns.pagina--;
+		renderAlbunsArtista();
+	});
+	document.getElementById("ar-pag-albuns-next")?.addEventListener("click", () => {
+		arAlbuns.pagina++;
+		renderAlbunsArtista();
+	});
 
-["t-results", "t-album", "lc-rows", "t-favs", "ex-tracks"].forEach((id) => {
+
+
+	["t-results", "t-album", "lc-rows", "t-favs", "ex-tracks"].forEach((id) => {
 		const el = document.getElementById(id);
 		if (!el) return;
 		el.addEventListener("click", (e) => {
 			const link = e.target.closest(".artist-link");
-			if (link) openArtist(link);
+			if (link) {
+			link.dataset.origemView = viewDoLink(id); // "search", "album", "local", "favs", "explore"
+			openArtist(link);
+			}
 		});
 	});
 
@@ -2847,6 +3057,79 @@
 		e.stopPropagation();
 		toggleFav(b.dataset.favId, b);
 	});
+/* Badge "Disponível" — clique leva ao item (faixa/álbum/playlist) */
+document.addEventListener("click", (e) => {
+    const badge = e.target.closest(".tag.s-off");
+    if (!badge) return;
+    e.stopPropagation();
+
+    const row = badge.closest("tr.row");
+    const card = badge.closest(".card");
+
+    // 1) Linha de tabela (busca, álbum, artista, favoritas, local)
+    if (row) {
+        const tipo = row.dataset.type || "track";
+        const id = row.dataset.id || "";
+
+        if (tipo === "album") {
+            openAlbumData({
+                id,
+                title: row.querySelector(".t-cv b")?.textContent || "",
+                artist: row.querySelector(".t-cv small")?.textContent || "",
+                cover:
+                    (row.querySelector(".t-cv .cv")?.style.backgroundImage.match(/url\("?(.*?)"?\)/) || [])[1] || "",
+                origem: "search",
+            });
+            return;
+        }
+        if (tipo === "playlist") {
+            openPlaylist(row);
+            return;
+        }
+
+        // Faixa: se está na biblioteca local, abre a view da pasta/álbum dela.
+        // Caso contrário, abre a página do álbum da faixa (se houver albumId).
+        if (row.closest("#t-album, #lc-rows, #t-favs, #t-artist-top")) {
+            // já estamos numa lista local — só toca
+            if (row.dataset.preview) playRow(row);
+            return;
+        }
+        if (curAlbum && row.closest("#t-album")) {
+            if (row.dataset.preview) playRow(row);
+            return;
+        }
+        if (row.dataset.preview) {
+            playRow(row);
+            return;
+        }
+        return;
+    }
+
+    // 2) Card da biblioteca (álbum ou artista)
+    if (card) {
+        if (card.dataset.rel) {
+            const origem = card.closest("#g-lib-albums") ? "albums" : "playlists";
+            abrirLocal(card.dataset.rel, card.querySelector("b")?.textContent || "", origem);
+            return;
+        }
+        if (card.closest("#g-lib-artists")) {
+            gArtists?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+            card.click();
+            return;
+        }
+        if (card.dataset.albumId) {
+            openAlbumData({
+                id: card.dataset.albumId,
+                title: card.querySelector("b")?.textContent || "",
+                artist: card.querySelector("small")?.textContent || "",
+                cover: card.dataset.cover || "",
+                origem: "artist",
+                origemView: "artist",
+            });
+        }
+    }
+});
+
 
 	/* ==========================================================================
 		14. ADICIONAR À PLAYLIST (modal unificado)

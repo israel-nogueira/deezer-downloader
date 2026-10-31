@@ -1,0 +1,26 @@
+directories:
+  output: dist
+  buildResources: build
+appId: com.local.deezerplayer
+productName: Deezer Offline
+files:
+  - filter:
+      - main.js
+      - preload.js
+      - server.js
+      - organizer.js
+      - renderer/**/*
+      - package.json
+extraResources:
+  - from: resources/server
+    to: server
+    filter:
+      - '**/*'
+win:
+  target:
+    - nsis
+  icon: renderer/favicon.ico
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+electronVersion: 45.0.0

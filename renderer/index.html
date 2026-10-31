@@ -313,7 +313,7 @@
 			place-items: center;
 			color: var(--mut);
 		}
-
+		
 		.win button:hover {
 			background: var(--panel2);
 			color: var(--txt);
@@ -679,7 +679,32 @@
 			background: #ff4d6d;
 			color: #000;
 		}
+		/* Badge "Disponível" — verde, clicável, mesmo formato de .s-ok */
+		.tag.s-off {
+			background: #1db954;
+			color: #000;
+			cursor: pointer;
+			display: inline-flex;
+			align-items: center;
+			transition: transform 0.1s, box-shadow 0.2s;
+			padding: 8px 18px;
+			font-size: 12px;
+		}
 
+		.tag.s-off .i {
+			width: 11px;
+			height: 11px;
+			stroke-width: 2.5;
+		}
+
+		.tag.s-off:hover {
+			transform: translateY(-1px);
+			box-shadow: 0 3px 12px rgba(29, 185, 84, 0.45);
+		}
+
+		.tag.s-off:active {
+			transform: scale(0.95);
+		}
 		/* ==========================================================================
 		10. ARTISTA
 		========================================================================== */
@@ -1913,6 +1938,14 @@
 	<header class="titlebar">
 		<span>Deezer Player</span>
 		<div class="win">
+			<button id="b-mini" data-tip="Mini player">
+				<svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" class="bi bi-arrows-collapse" viewBox="0 0 20 20"
+					style="margin: 4px 0;height: 34px;left: 50%;position: relative;transform: translateX(-60%);">
+					<path fill-rule="evenodd"
+						d="M1 8a.5.5 0 0 1 .5-.5h13a.5.5 0 0 1 0 1h-13A.5.5 0 0 1 1 8m7-8a.5.5 0 0 1 .5.5v3.793l1.146-1.147a.5.5 0 0 1 .708.708l-2 2a.5.5 0 0 1-.708 0l-2-2a.5.5 0 1 1 .708-.708L7.5 4.293V.5A.5.5 0 0 1 8 0m-.5 11.707-1.146 1.147a.5.5 0 0 1-.708-.708l2-2a.5.5 0 0 1 .708 0l2 2a.5.5 0 0 1-.708.708L8.5 11.707V15.5a.5.5 0 0 1-1 0z">
+					</path>
+				</svg>
+			</button>
 			<button data-win="min">
 				<svg class="i sm">
 					<use href="#i-min" />
@@ -1998,6 +2031,11 @@
 						<label><input type="radio" name="s-type" value="album" /><span>Álbum</span></label>
 						<label><input type="radio" name="s-type" value="playlist" /><span>Playlist</span></label>
 					</div>
+					<label class="filtro-offline"
+						style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mut);cursor:pointer;user-select:none;">
+						<input type="checkbox" class="chk-offline" /> Mostrar apenas offline
+					</label>
+
 				</div>
 				<table class="tracks">
 					<thead>
@@ -2026,12 +2064,17 @@
 							<small id="a-info"></small>
 						</div>
 					</div>
-					<button type="button" class="pp" id="a-play" data-tip="Tocar álbum" style="margin-left: auto"
-						disabled>
+					<button type="button" class="pp" id="a-play" data-tip="Tocar álbum" style="margin-left: auto" disabled>
 						<svg class="i f">
 							<use href="#i-play" />
 						</svg>
 					</button>
+
+					<label class="filtro-offline"
+						style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mut);margin-left:auto;cursor:pointer;user-select:none;">
+						<input type="checkbox" class="chk-offline" /> Mostrar apenas offline
+					</label>
+
 					<button type="button" class="dl" id="a-all" style="display: none">
 						<svg class="i sm">
 							<use href="#i-download" />
@@ -2050,6 +2093,13 @@
 					</thead>
 					<tbody id="t-album"></tbody>
 				</table>
+
+				<div class="paginacao" id="album-pag">
+					<button type="button" id="album-pag-prev">← Anterior</button>
+					<span class="info" id="album-pag-info"></span>
+					<button type="button" id="album-pag-next">Próxima →</button>
+				</div>
+
 			</section>
 
 			<!-- VIEW: Página do artista (com abas) -->
@@ -2067,7 +2117,12 @@
 						</svg>
 					</button>
 				</div>
-
+				<div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
+					<label class="filtro-offline"
+						style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mut);cursor:pointer;user-select:none;">
+						<input type="checkbox" class="chk-offline" /> Mostrar apenas offline
+					</label>
+				</div>
 				<div class="tabs" id="ar-tabs">
 					<button type="button" class="tab on" data-tab="musicas">Músicas</button>
 					<button type="button" class="tab" data-tab="albuns">Álbuns</button>
@@ -2107,6 +2162,11 @@
 				<!-- Painel Álbuns -->
 				<div class="tab-panel" id="ar-panel-albuns">
 					<div class="grid" id="ar-albums"></div>
+					<div class="paginacao" id="ar-pag-albuns">
+						<button type="button" id="ar-pag-albuns-prev">← Anterior</button>
+						<span class="info" id="ar-pag-albuns-info"></span>
+						<button type="button" id="ar-pag-albuns-next">Próxima →</button>
+					</div>
 				</div>
 
 				<!-- Painel Playlists -->
@@ -2479,11 +2539,6 @@
 		</div>
 
 		<div class="right">
-			<button class="ibtn" id="b-mini" data-tip="Mini player">
-				<svg class="i sm">
-					<use href="#i-expand" />
-				</svg>
-			</button>
 			<button class="ibtn" id="b-mute" data-tip="Mudo">
 				<svg class="i">
 					<use id="u-vol" href="#i-vol" />
